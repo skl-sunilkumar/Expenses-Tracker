@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Daily Expense Tracker</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#4f46e5">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Expenses">
+<style>
+:root {
+  --primary: #4f46e5;
+  --primary-dark: #3730a3;
+  --bg: #f4f5fb;
+  --card-bg: #ffffff;
+  --text: #1f2333;
+  --muted: #6b7280;
+  --success: #16a34a;
+  --danger: #dc2626;
+  --border: #e5e7eb;
+  --radius: 12px;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: "Segoe UI", Roboto, Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+.app-header {
+  background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+  color: white;
+  padding: 28px 20px 20px;
+  text-align: center;
+}
+.app-header h1 { margin: 0 0 4px; font-size: 1.7rem; }
+.subtitle { margin: 0; opacity: 0.85; font-size: 0.95rem; }
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  background: var(--card-bg);
+  padding: 12px;
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+.tab-btn {
+  border: none;
+  background: transparent;
+  padding: 8px 16px;
+  border-radius: 20px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  color: var(--muted);
+  transition: 0.15s;
+}
+.tab-btn:hover { background: #eef0fb; }
+.tab-btn.active { background: var(--primary); color: white; }
+.container { max-width: 960px; margin: 0 auto; padding: 20px; }
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 14px;
+  margin-bottom: 20px;
+}
+.stat-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.stat-card.highlight { border-color: var(--primary); background: #eef0fd; }
+.stat-label { font-size: 0.8rem; color: var(--muted); }
+.stat-value { font-size: 1.4rem; font-weight: 700; }
+.panel {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  margin-bottom: 20px;
+}
+.panel h2 { margin-top: 0; font-size: 1.1rem; }
+.panel.narrow { max-width: 480px; margin-left: auto; margin-right: auto; }
+form { display: flex; flex-direction: column; gap: 4px; }
+form label { font-size: 0.85rem; color: var(--muted); margin-top: 10px; }
+form input, form select {
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  font-size: 0.95rem;
+  font-family: inherit;
+}
+form button {
+  margin-top: 18px;
+  padding: 12px;
+  background: var(--primary);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  cursor: pointer;
+}
+form button:hover { background: var(--primary-dark); }
+.hidden { display: none; }
+.form-msg { min-height: 1.2em; font-size: 0.85rem; margin-top: 8px; }
+.form-msg.success { color: var(--success); }
+.form-msg.error { color: var(--danger); }
+.bar-list { display: flex; flex-direction: column; gap: 12px; }
+.bar-row .bar-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.85rem;
+  margin-bottom: 4px;
+  text-transform: capitalize;
+}
+.bar-track { background: #eef0f3; border-radius: 6px; height: 10px; overflow: hidden; }
+.bar-fill { height: 100%; background: var(--primary); border-radius: 6px; }
+.empty-note { color: var(--muted); font-size: 0.9rem; }
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--border); }
+th { color: var(--muted); font-weight: 600; }
+.delete-btn { background: none; border: none; color: var(--danger); cursor: pointer; font-size: 0.85rem; }
+.storage-note {
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  color: #9a3412;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 0.82rem;
+  margin-bottom: 16px;
+}
+@media (max-width: 500px) {
+  .app-header h1 { font-size: 1.4rem; }
+  .tab-btn { font-size: 0.8rem; padding: 6px 10px; }
+}
+</style>
+</head>
+<body>
+
+<header class="app-header">
+  <h1>💰 Daily Expense Tracker</h1>
+  <p class="subtitle">Transport, spending & pocket money — all in one place</p>
+</header>
+
+<nav class="tabs">
+  <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
+  <button class="tab-btn" data-tab="transport">Add Transport</button>
+  <button class="tab-btn" data-tab="other">Add Other Expense</button>
+  <button class="tab-btn" data-tab="history">History</button>
+  <button class="tab-btn" data-tab="budget">Pocket Money</button>
+</nav>
+
+<main class="container">
+
+  <div class="storage-note">
+    Your data is saved right in this browser on this computer (no internet or server needed). Don't clear your browser's site data for this page, or it'll be lost — and it won't automatically show up if you open this file on a different computer or browser.
+  </div>
+
+  <!-- ================= DASHBOARD ================= -->
+  <section id="dashboard" class="tab-panel active">
+    <div class="card-grid">
+      <div class="stat-card">
+        <span class="stat-label">Monthly Pocket Money</span>
+        <span class="stat-value" id="stat-budget">₹0</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Total Spent (this month)</span>
+        <span class="stat-value" id="stat-spent">₹0</span>
+      </div>
+      <div class="stat-card highlight">
+        <span class="stat-label">Remaining Balance</span>
+        <span class="stat-value" id="stat-remaining">₹0</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Daily Average Spend</span>
+        <span class="stat-value" id="stat-daily-avg">₹0</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Projected Month-End Spend</span>
+        <span class="stat-value" id="stat-projected">₹0</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Projected Remaining</span>
+        <span class="stat-value" id="stat-projected-remaining">₹0</span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Breakdown by Category</h2>
+      <div id="category-bars" class="bar-list"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Transport Breakdown</h2>
+      <div id="transport-bars" class="bar-list"></div>
+    </div>
+  </section>
+
+  <!-- ================= ADD TRANSPORT ================= -->
+  <section id="transport" class="tab-panel">
+    <div class="panel narrow">
+      <h2>Add Transport Expense</h2>
+      <form id="transport-form" novalidate>
+        <label>Date</label>
+        <input type="date" name="expense_date">
+
+        <label>Transport Type</label>
+        <select name="transport_type" id="transport_type">
+          <option value="">-- Select --</option>
+          <option value="auto">Auto</option>
+          <option value="bike">Bike</option>
+          <option value="mofussil_bus">Mofussil Bus</option>
+        </select>
+
+        <div id="bus-fields" class="hidden">
+          <label>Bus Category</label>
+          <select name="bus_category" id="bus_category">
+            <option value="">-- Select --</option>
+            <option value="ac">AC</option>
+            <option value="deluxe">Deluxe</option>
+            <option value="normal">Normal</option>
+          </select>
+
+          <label>Bus Number</label>
+          <input type="text" name="bus_number" id="bus_number" placeholder="e.g. TN-45-AB-1234">
+        </div>
+
+        <label>Amount (₹)</label>
+        <input type="number" step="0.01" min="0" name="amount">
+
+        <label>Route (From → To)</label>
+        <select name="route" id="route_select">
+          <option value="">-- Select Route --</option>
+          <option>HOME-1 to KPM</option>
+          <option>KPM to POONAMALLEE</option>
+          <option>POONAMALLEE to HOME-2</option>
+          <option>HOME-2 to KUMMANACHAVADI</option>
+          <option>KUMMANACHAVADI to DGV</option>
+          <option>DGV to KUMMANACHAVADI</option>
+          <option>KUMMANACHAVADI to HOME-2</option>
+          <option>HOME-2 to POONAMALLEE</option>
+          <option>POONAMALLEE to KPM</option>
+          <option>KPM to HOME-1</option>
+          <option value="other">Other (type manually)</option>
+        </select>
+
+        <div id="custom-route-fields" class="hidden">
+          <label>From Place</label>
+          <input type="text" id="from_place" placeholder="e.g. Home">
+          <label>To Place</label>
+          <input type="text" id="to_place" placeholder="e.g. Office">
+        </div>
+
+        <label>Payment Method</label>
+        <select name="payment_source" id="payment_source">
+          <option value="">-- Select --</option>
+          <option value="cash">Cash</option>
+          <option value="gpay">G-Pay</option>
+          <option value="whatsapp_pay">WhatsApp Pay</option>
+          <option value="other">Other</option>
+        </select>
+
+        <button type="submit">Add Transport Expense</button>
+        <p class="form-msg" id="transport-msg"></p>
+      </form>
+    </div>
+  </section>
+
+  <!-- ================= ADD OTHER EXPENSE ================= -->
+  <section id="other" class="tab-panel">
+    <div class="panel narrow">
+      <h2>Add Other Expense</h2>
+      <form id="other-form" novalidate>
+        <label>Date</label>
+        <input type="date" name="expense_date">
+
+        <label>Category</label>
+        <select name="category" id="category">
+          <option value="">-- Select --</option>
+          <option value="food">Food</option>
+          <option value="clothes">Clothes</option>
+          <option value="stationary">Stationary</option>
+          <option value="other">Other (type below)</option>
+        </select>
+
+        <div id="custom-category-field" class="hidden">
+          <label>Specify Category</label>
+          <input type="text" id="custom_category" placeholder="e.g. groceries">
+        </div>
+
+        <label>Description (optional)</label>
+        <input type="text" name="description" placeholder="e.g. new shirt">
+
+        <label>Amount (₹)</label>
+        <input type="number" step="0.01" min="0" name="amount">
+
+        <button type="submit">Add Expense</button>
+        <p class="form-msg" id="other-msg"></p>
+      </form>
+    </div>
+  </section>
+
+  <!-- ================= HISTORY ================= -->
+  <section id="history" class="tab-panel">
+    <div class="panel">
+      <h2>All Expenses (this month)</h2>
+      <div class="table-wrap">
+        <table id="history-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Type</th>
+              <th>Details</th>
+              <th>Paid Via</th>
+              <th>Amount</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <p class="empty-note" id="history-empty" style="display:none;">No expenses logged yet for this month.</p>
+    </div>
+  </section>
+
+  <!-- ================= BUDGET ================= -->
+  <section id="budget" class="tab-panel">
+    <div class="panel narrow">
+      <h2>Set Monthly Pocket Money</h2>
+      <form id="budget-form" novalidate>
+        <label>Month</label>
+        <input type="month" name="month_year">
+
+        <label>Pocket Money Amount (₹)</label>
+        <input type="number" step="0.01" min="0" name="pocket_money">
+
+        <button type="submit">Save Budget</button>
+        <p class="form-msg" id="budget-msg"></p>
+      </form>
+    </div>
+  </section>
+
+</main>
+
+<script>
+const STORAGE_KEY = 'expense_tracker_data_v1';
+const currentMonth = new Date().toISOString().slice(0, 7); // YYYY-MM
+
+// ---------- Storage helpers ----------
+function loadData() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch (e) { /* fall through to default */ }
+  return { transport: [], other: [], budgets: {} };
+}
+function saveData(data) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+}
+let db = loadData();
+let nextId = (function () {
+  let max = 0;
+  db.transport.forEach(r => { if (r.id > max) max = r.id; });
+  db.other.forEach(r => { if (r.id > max) max = r.id; });
+  return max + 1;
+})();
+
+// ---------- Tab switching ----------
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById(btn.dataset.tab).classList.add('active');
+    if (btn.dataset.tab === 'dashboard') renderSummary();
+    if (btn.dataset.tab === 'history') renderHistory();
+  });
+});
+
+// default dates to today
+document.querySelectorAll('input[type="date"]').forEach(el => {
+  el.value = new Date().toISOString().slice(0, 10);
+});
+const monthInput = document.querySelector('input[name="month_year"]');
+if (monthInput) monthInput.value = currentMonth;
+
+// ---------- Transport form dynamic fields ----------
+const transportType = document.getElementById('transport_type');
+const busFields = document.getElementById('bus-fields');
+transportType.addEventListener('change', () => {
+  const isBus = transportType.value === 'mofussil_bus';
+  busFields.classList.toggle('hidden', !isBus);
+});
+
+// ---------- Route select (preset routes or manual entry) ----------
+const routeSelect = document.getElementById('route_select');
+const customRouteFields = document.getElementById('custom-route-fields');
+routeSelect.addEventListener('change', () => {
+  const isOther = routeSelect.value === 'other';
+  customRouteFields.classList.toggle('hidden', !isOther);
+});
+
+// ---------- Other expense custom category ----------
+const categorySelect = document.getElementById('category');
+const customCategoryField = document.getElementById('custom-category-field');
+categorySelect.addEventListener('change', () => {
+  const isOther = categorySelect.value === 'other';
+  customCategoryField.classList.toggle('hidden', !isOther);
+});
+
+// ---------- Helpers ----------
+function showMsg(el, text, ok) {
+  el.textContent = text;
+  el.className = 'form-msg ' + (ok ? 'success' : 'error');
+}
+function money(n) {
+  return '₹' + Number(n).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function monthOf(dateStr) { return dateStr.slice(0, 7); }
+
+// ---------- Transport form submit ----------
+document.getElementById('transport-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const form = e.target;
+  const msg = document.getElementById('transport-msg');
+  const type = form.transport_type.value;
+  const amount = parseFloat(form.amount.value);
+
+  if (!form.expense_date.value || !type || !(amount > 0)) {
+    showMsg(msg, 'Please fill in date, type, and a valid amount.', false);
+    return;
+  }
+  if (type === 'mofussil_bus' && !form.bus_category.value) {
+    showMsg(msg, 'Please select a bus category.', false);
+    return;
+  }
+
+  // ---- Route (mandatory: either a preset, or manually typed From/To) ----
+  const routeValue = routeSelect.value;
+  let route;
+  if (!routeValue) {
+    showMsg(msg, 'Please select a route.', false);
+    return;
+  }
+  if (routeValue === 'other') {
+    const from = document.getElementById('from_place').value.trim();
+    const to = document.getElementById('to_place').value.trim();
+    if (!from || !to) {
+      showMsg(msg, 'Please fill in both From and To places.', false);
+      return;
+    }
+    route = `${from} to ${to}`;
+  } else {
+    route = routeValue;
+  }
+
+  // ---- Payment method (mandatory) ----
+  const paymentValue = form.payment_source.value;
+  if (!paymentValue) {
+    showMsg(msg, 'Please select a payment method.', false);
+    return;
+  }
+
+  db.transport.push({
+    id: nextId++,
+    expense_date: form.expense_date.value,
+    transport_type: type,
+    bus_category: type === 'mofussil_bus' ? form.bus_category.value : null,
+    bus_number: type === 'mofussil_bus' ? (form.bus_number.value.trim() || null) : null,
+    amount: amount,
+    route: route,
+    payment_source: paymentValue
+  });
+  saveData(db);
+
+  showMsg(msg, 'Transport expense added!', true);
+  form.reset();
+  form.expense_date.value = new Date().toISOString().slice(0, 10);
+  busFields.classList.add('hidden');
+  customRouteFields.classList.add('hidden');
+});
+
+// ---------- Other expense form submit ----------
+document.getElementById('other-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const form = e.target;
+  const msg = document.getElementById('other-msg');
+  let category = form.category.value;
+  const amount = parseFloat(form.amount.value);
+
+  if (!form.expense_date.value || !category || !(amount > 0)) {
+    showMsg(msg, 'Please fill in date, category, and a valid amount.', false);
+    return;
+  }
+  if (category === 'other') {
+    category = document.getElementById('custom_category').value.trim().toLowerCase() || 'other';
+  }
+
+  db.other.push({
+    id: nextId++,
+    expense_date: form.expense_date.value,
+    category: category,
+    description: form.description.value.trim() || null,
+    amount: amount
+  });
+  saveData(db);
+
+  showMsg(msg, 'Expense added!', true);
+  form.reset();
+  form.expense_date.value = new Date().toISOString().slice(0, 10);
+  customCategoryField.classList.add('hidden');
+});
+
+// ---------- Budget form submit ----------
+document.getElementById('budget-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const form = e.target;
+  const msg = document.getElementById('budget-msg');
+  const monthYear = form.month_year.value;
+  const amount = parseFloat(form.pocket_money.value);
+
+  if (!monthYear || !(amount >= 0)) {
+    showMsg(msg, 'Please fill in month and a valid amount.', false);
+    return;
+  }
+
+  db.budgets[monthYear] = amount;
+  saveData(db);
+  showMsg(msg, 'Budget saved!', true);
+  renderSummary();
+});
+
+// ---------- Dashboard summary (all math computed here) ----------
+function renderSummary() {
+  const pocketMoney = db.budgets[currentMonth] || 0;
+
+  const monthTransport = db.transport.filter(r => monthOf(r.expense_date) === currentMonth);
+  const monthOther = db.other.filter(r => monthOf(r.expense_date) === currentMonth);
+
+  const transportByType = { auto: 0, bike: 0, mofussil_bus: 0 };
+  monthTransport.forEach(r => { transportByType[r.transport_type] += r.amount; });
+  const totalTransport = Object.values(transportByType).reduce((a, b) => a + b, 0);
+
+  const otherByCategory = {};
+  monthOther.forEach(r => { otherByCategory[r.category] = (otherByCategory[r.category] || 0) + r.amount; });
+  const totalOther = Object.values(otherByCategory).reduce((a, b) => a + b, 0);
+
+  const totalSpent = totalTransport + totalOther;
+  const remaining = pocketMoney - totalSpent;
+
+  const today = new Date();
+  const isCurrentMonth = today.toISOString().slice(0, 7) === currentMonth;
+  const [y, m] = currentMonth.split('-').map(Number);
+  const daysInMonth = new Date(y, m, 0).getDate();
+  const daysElapsed = Math.max(isCurrentMonth ? today.getDate() : daysInMonth, 1);
+
+  const dailyAverage = totalSpent / daysElapsed;
+  const projectedTotal = dailyAverage * daysInMonth;
+  const projectedRemaining = pocketMoney - projectedTotal;
+
+  document.getElementById('stat-budget').textContent = money(pocketMoney);
+  document.getElementById('stat-spent').textContent = money(totalSpent);
+  document.getElementById('stat-remaining').textContent = money(remaining);
+  document.getElementById('stat-daily-avg').textContent = money(dailyAverage);
+  document.getElementById('stat-projected').textContent = money(projectedTotal);
+  document.getElementById('stat-projected-remaining').textContent = money(projectedRemaining);
+
+  const categoryBreakdown = { transport: totalTransport, ...otherByCategory };
+  const categoryPercentages = {};
+  Object.keys(categoryBreakdown).forEach(k => {
+    categoryPercentages[k] = totalSpent > 0 ? Math.round((categoryBreakdown[k] / totalSpent) * 1000) / 10 : 0;
+  });
+
+  const transportPercentages = {};
+  Object.keys(transportByType).forEach(k => {
+    transportPercentages[k] = totalTransport > 0 ? Math.round((transportByType[k] / totalTransport) * 1000) / 10 : 0;
+  });
+
+  renderBars('category-bars', categoryBreakdown, categoryPercentages);
+  renderBars('transport-bars', transportByType, transportPercentages);
+}
+
+function renderBars(containerId, amounts, percentages) {
+  const container = document.getElementById(containerId);
+  container.innerHTML = '';
+  const keys = Object.keys(amounts);
+  if (keys.length === 0 || keys.every(k => amounts[k] === 0)) {
+    container.innerHTML = '<p class="empty-note">No data yet.</p>';
+    return;
+  }
+  keys.forEach(key => {
+    const pct = percentages[key] || 0;
+    const row = document.createElement('div');
+    row.className = 'bar-row';
+    row.innerHTML = `
+      <div class="bar-label"><span>${key.replace('_', ' ')}</span><span>${money(amounts[key])} (${pct}%)</span></div>
+      <div class="bar-track"><div class="bar-fill" style="width:${pct}%"></div></div>
+    `;
+    container.appendChild(row);
+  });
+}
+
+// ---------- History ----------
+function renderHistory() {
+  const rows = [
+    ...db.transport.filter(r => monthOf(r.expense_date) === currentMonth).map(r => ({ ...r, source: 'transport', detail_type: r.transport_type, description: r.route })),
+    ...db.other.filter(r => monthOf(r.expense_date) === currentMonth).map(r => ({ ...r, source: 'other', detail_type: r.category }))
+  ].sort((a, b) => (a.expense_date < b.expense_date ? 1 : a.expense_date > b.expense_date ? -1 : b.id - a.id));
+
+  const tbody = document.querySelector('#history-table tbody');
+  const emptyNote = document.getElementById('history-empty');
+  tbody.innerHTML = '';
+
+  if (rows.length === 0) {
+    emptyNote.style.display = 'block';
+    return;
+  }
+  emptyNote.style.display = 'none';
+
+  rows.forEach(r => {
+    const tr = document.createElement('tr');
+    let details = r.detail_type.replace('_', ' ');
+    if (r.source === 'transport' && r.detail_type === 'mofussil_bus') {
+      details += ` (${r.bus_category || ''}${r.bus_number ? ', ' + r.bus_number : ''})`;
+    }
+    if (r.description) details += ` — ${r.description}`;
+
+    const paymentLabels = { cash: 'Cash', gpay: 'G-Pay', whatsapp_pay: 'WhatsApp Pay', other: 'Other' };
+    const paidVia = r.source === 'transport' && r.payment_source ? (paymentLabels[r.payment_source] || r.payment_source) : '—';
+
+    tr.innerHTML = `
+      <td>${r.expense_date}</td>
+      <td>${r.source === 'transport' ? 'Transport' : 'Other'}</td>
+      <td>${details}</td>
+      <td>${paidVia}</td>
+      <td>${money(r.amount)}</td>
+      <td><button class="delete-btn" data-id="${r.id}" data-source="${r.source}">Delete</button></td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  tbody.querySelectorAll('.delete-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = parseInt(btn.dataset.id, 10);
+      const source = btn.dataset.source;
+      if (source === 'transport') {
+        db.transport = db.transport.filter(r => r.id !== id);
+      } else {
+        db.other = db.other.filter(r => r.id !== id);
+      }
+      saveData(db);
+      renderHistory();
+      renderSummary();
+    });
+  });
+}
+
+// ---------- Init ----------
+renderSummary();
+
+// ---------- Register service worker (enables offline install as an app) ----------
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('service-worker.js').catch(() => {
+      // Silently ignore if this file is opened directly without a server;
+      // the app still works fine, it just won't be installable as a home-screen app.
+    });
+  });
+}
+</script>
+</body>
+</html>
