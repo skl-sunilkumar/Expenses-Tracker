@@ -4,7 +4,7 @@ A lightweight, installable web app to track daily transport and other expenses
 against your monthly pocket money — runs entirely in your browser, works fully
 offline, and needs no backend or database server.
 
-**Live app:** https://skl-sunilkumar.github.io/Expense-Tracker/
+**Live app:** https://skl-sunilkumar.github.io/Expense-Tracker/index.html
 
 ## Features
 
