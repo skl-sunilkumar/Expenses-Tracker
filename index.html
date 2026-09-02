@@ -6,8 +6,8 @@
 <title>Daily Expense Tracker</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#4f46e5">
-<link rel="icon" href="icons/icon-192.png">
-<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Expenses">
@@ -146,6 +146,34 @@ th { color: var(--muted); font-weight: 600; }
   .app-header h1 { font-size: 1.4rem; }
   .tab-btn { font-size: 0.8rem; padding: 6px 10px; }
 }
+
+#report-btn {
+  padding: 12px 18px;
+  background: var(--primary);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+#report-btn:hover { background: var(--primary-dark); }
+
+/* Print-only report: hidden on screen, shown only when printing/saving as PDF */
+.print-only { display: none; }
+.report-title { font-size: 1.3rem; margin: 0 0 2px; }
+.report-subtitle { color: #555; font-size: 0.85rem; margin: 0 0 20px; }
+.report-table { width: 100%; border-collapse: collapse; margin-bottom: 22px; font-size: 0.85rem; }
+.report-table th, .report-table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #ddd; }
+.report-table th { background: #f0f0f5; }
+.report-section-title { font-size: 1rem; margin: 22px 0 8px; border-bottom: 2px solid #333; padding-bottom: 4px; }
+.report-summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 20px; margin-bottom: 10px; font-size: 0.9rem; }
+.report-summary-grid div span:first-child { color: #555; }
+.report-summary-grid div span:last-child { font-weight: 700; float: right; }
+
+@media print {
+  body > *:not(.print-only) { display: none !important; }
+  .print-only { display: block !important; padding: 20px; }
+}
 </style>
 </head>
 <body>
@@ -169,32 +197,17 @@ th { color: var(--muted); font-weight: 600; }
     Your data is saved right in this browser on this computer (no internet or server needed). Don't clear your browser's site data for this page, or it'll be lost — and it won't automatically show up if you open this file on a different computer or browser.
   </div>
 
+  <div class="panel" id="month-selector-panel">
+    <label style="margin-top:0;">Viewing Month</label>
+    <input type="month" id="global-month-select">
+  </div>
+
   <!-- ================= DASHBOARD ================= -->
   <section id="dashboard" class="tab-panel active">
     <div class="card-grid">
-      <div class="stat-card">
-        <span class="stat-label">Monthly Pocket Money</span>
-        <span class="stat-value" id="stat-budget">₹0</span>
-      </div>
-      <div class="stat-card">
-        <span class="stat-label">Total Spent (this month)</span>
-        <span class="stat-value" id="stat-spent">₹0</span>
-      </div>
       <div class="stat-card highlight">
-        <span class="stat-label">Remaining Balance</span>
-        <span class="stat-value" id="stat-remaining">₹0</span>
-      </div>
-      <div class="stat-card">
-        <span class="stat-label">Daily Average Spend</span>
-        <span class="stat-value" id="stat-daily-avg">₹0</span>
-      </div>
-      <div class="stat-card">
-        <span class="stat-label">Projected Month-End Spend</span>
-        <span class="stat-value" id="stat-projected">₹0</span>
-      </div>
-      <div class="stat-card">
-        <span class="stat-label">Projected Remaining</span>
-        <span class="stat-value" id="stat-projected-remaining">₹0</span>
+        <span class="stat-label">Total Spent This Month</span>
+        <span class="stat-value" id="stat-spent">₹0</span>
       </div>
     </div>
 
@@ -206,6 +219,12 @@ th { color: var(--muted); font-weight: 600; }
     <div class="panel">
       <h2>Transport Breakdown</h2>
       <div id="transport-bars" class="bar-list"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Monthly Report</h2>
+      <p class="empty-note" style="margin-top:0;">Generates a clean summary of the selected month's spending that you can save as a PDF.</p>
+      <button id="report-btn" type="button">📄 Download Monthly Report (PDF)</button>
     </div>
   </section>
 
@@ -273,6 +292,9 @@ th { color: var(--muted); font-weight: 600; }
           <option value="other">Other</option>
         </select>
 
+        <label>Remarks (optional)</label>
+        <input type="text" name="remarks" id="transport_remarks" placeholder="e.g. traffic delay, shared ride">
+
         <button type="submit">Add Transport Expense</button>
         <p class="form-msg" id="transport-msg"></p>
       </form>
@@ -301,7 +323,7 @@ th { color: var(--muted); font-weight: 600; }
           <input type="text" id="custom_category" placeholder="e.g. groceries">
         </div>
 
-        <label>Description (optional)</label>
+        <label>Remarks (optional)</label>
         <input type="text" name="description" placeholder="e.g. new shirt">
 
         <label>Amount (₹)</label>
@@ -355,9 +377,11 @@ th { color: var(--muted); font-weight: 600; }
 
 </main>
 
+<div id="print-report" class="print-only"></div>
+
 <script>
 const STORAGE_KEY = 'expense_tracker_data_v1';
-const currentMonth = new Date().toISOString().slice(0, 7); // YYYY-MM
+let selectedMonth = new Date().toISOString().slice(0, 7); // YYYY-MM, mutable — controlled by the month picker
 
 // ---------- Storage helpers ----------
 function loadData() {
@@ -395,7 +419,17 @@ document.querySelectorAll('input[type="date"]').forEach(el => {
   el.value = new Date().toISOString().slice(0, 10);
 });
 const monthInput = document.querySelector('input[name="month_year"]');
-if (monthInput) monthInput.value = currentMonth;
+if (monthInput) monthInput.value = selectedMonth;
+
+// ---------- Global month selector (drives Dashboard, History, and the PDF report) ----------
+const globalMonthSelect = document.getElementById('global-month-select');
+globalMonthSelect.value = selectedMonth;
+globalMonthSelect.addEventListener('change', () => {
+  if (!globalMonthSelect.value) { globalMonthSelect.value = selectedMonth; return; }
+  selectedMonth = globalMonthSelect.value;
+  renderSummary();
+  renderHistory();
+});
 
 // ---------- Transport form dynamic fields ----------
 const transportType = document.getElementById('transport_type');
@@ -430,6 +464,7 @@ function money(n) {
   return '₹' + Number(n).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 function monthOf(dateStr) { return dateStr.slice(0, 7); }
+const PAYMENT_LABELS = { cash: 'Cash', gpay: 'G-Pay', whatsapp_pay: 'WhatsApp Pay', other: 'Other' };
 
 // ---------- Transport form submit ----------
 document.getElementById('transport-form').addEventListener('submit', (e) => {
@@ -482,7 +517,8 @@ document.getElementById('transport-form').addEventListener('submit', (e) => {
     bus_number: type === 'mofussil_bus' ? (form.bus_number.value.trim() || null) : null,
     amount: amount,
     route: route,
-    payment_source: paymentValue
+    payment_source: paymentValue,
+    remarks: form.remarks.value.trim() || null
   });
   saveData(db);
 
@@ -543,12 +579,12 @@ document.getElementById('budget-form').addEventListener('submit', (e) => {
   renderSummary();
 });
 
-// ---------- Dashboard summary (all math computed here) ----------
-function renderSummary() {
-  const pocketMoney = db.budgets[currentMonth] || 0;
+// ---------- Compute all stats for a given month (used by dashboard + PDF report) ----------
+function computeMonthStats(month) {
+  const pocketMoney = db.budgets[month] || 0;
 
-  const monthTransport = db.transport.filter(r => monthOf(r.expense_date) === currentMonth);
-  const monthOther = db.other.filter(r => monthOf(r.expense_date) === currentMonth);
+  const monthTransport = db.transport.filter(r => monthOf(r.expense_date) === month);
+  const monthOther = db.other.filter(r => monthOf(r.expense_date) === month);
 
   const transportByType = { auto: 0, bike: 0, mofussil_bus: 0 };
   monthTransport.forEach(r => { transportByType[r.transport_type] += r.amount; });
@@ -562,21 +598,14 @@ function renderSummary() {
   const remaining = pocketMoney - totalSpent;
 
   const today = new Date();
-  const isCurrentMonth = today.toISOString().slice(0, 7) === currentMonth;
-  const [y, m] = currentMonth.split('-').map(Number);
+  const isCurrentMonth = today.toISOString().slice(0, 7) === month;
+  const [y, m] = month.split('-').map(Number);
   const daysInMonth = new Date(y, m, 0).getDate();
   const daysElapsed = Math.max(isCurrentMonth ? today.getDate() : daysInMonth, 1);
 
   const dailyAverage = totalSpent / daysElapsed;
   const projectedTotal = dailyAverage * daysInMonth;
   const projectedRemaining = pocketMoney - projectedTotal;
-
-  document.getElementById('stat-budget').textContent = money(pocketMoney);
-  document.getElementById('stat-spent').textContent = money(totalSpent);
-  document.getElementById('stat-remaining').textContent = money(remaining);
-  document.getElementById('stat-daily-avg').textContent = money(dailyAverage);
-  document.getElementById('stat-projected').textContent = money(projectedTotal);
-  document.getElementById('stat-projected-remaining').textContent = money(projectedRemaining);
 
   const categoryBreakdown = { transport: totalTransport, ...otherByCategory };
   const categoryPercentages = {};
@@ -589,8 +618,22 @@ function renderSummary() {
     transportPercentages[k] = totalTransport > 0 ? Math.round((transportByType[k] / totalTransport) * 1000) / 10 : 0;
   });
 
-  renderBars('category-bars', categoryBreakdown, categoryPercentages);
-  renderBars('transport-bars', transportByType, transportPercentages);
+  return {
+    month, pocketMoney, totalTransport, totalOther, totalSpent, remaining,
+    dailyAverage, projectedTotal, projectedRemaining, daysElapsed, daysInMonth,
+    categoryBreakdown, categoryPercentages, transportByType, transportPercentages,
+    monthTransport, monthOther
+  };
+}
+
+// ---------- Dashboard summary (only Total Spent + category/transport breakdowns) ----------
+function renderSummary() {
+  const s = computeMonthStats(selectedMonth);
+
+  document.getElementById('stat-spent').textContent = money(s.totalSpent);
+
+  renderBars('category-bars', s.categoryBreakdown, s.categoryPercentages);
+  renderBars('transport-bars', s.transportByType, s.transportPercentages);
 }
 
 function renderBars(containerId, amounts, percentages) {
@@ -616,8 +659,8 @@ function renderBars(containerId, amounts, percentages) {
 // ---------- History ----------
 function renderHistory() {
   const rows = [
-    ...db.transport.filter(r => monthOf(r.expense_date) === currentMonth).map(r => ({ ...r, source: 'transport', detail_type: r.transport_type, description: r.route })),
-    ...db.other.filter(r => monthOf(r.expense_date) === currentMonth).map(r => ({ ...r, source: 'other', detail_type: r.category }))
+    ...db.transport.filter(r => monthOf(r.expense_date) === selectedMonth).map(r => ({ ...r, source: 'transport', detail_type: r.transport_type, description: r.route })),
+    ...db.other.filter(r => monthOf(r.expense_date) === selectedMonth).map(r => ({ ...r, source: 'other', detail_type: r.category }))
   ].sort((a, b) => (a.expense_date < b.expense_date ? 1 : a.expense_date > b.expense_date ? -1 : b.id - a.id));
 
   const tbody = document.querySelector('#history-table tbody');
@@ -637,9 +680,9 @@ function renderHistory() {
       details += ` (${r.bus_category || ''}${r.bus_number ? ', ' + r.bus_number : ''})`;
     }
     if (r.description) details += ` — ${r.description}`;
+    if (r.source === 'transport' && r.remarks) details += ` (${r.remarks})`;
 
-    const paymentLabels = { cash: 'Cash', gpay: 'G-Pay', whatsapp_pay: 'WhatsApp Pay', other: 'Other' };
-    const paidVia = r.source === 'transport' && r.payment_source ? (paymentLabels[r.payment_source] || r.payment_source) : '—';
+    const paidVia = r.source === 'transport' && r.payment_source ? (PAYMENT_LABELS[r.payment_source] || r.payment_source) : '—';
 
     tr.innerHTML = `
       <td>${r.expense_date}</td>
@@ -667,6 +710,102 @@ function renderHistory() {
     });
   });
 }
+
+// ---------- Monthly Report (PDF via browser print) ----------
+function monthLabel(month) {
+  const [y, m] = month.split('-').map(Number);
+  return new Date(y, m - 1, 1).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+}
+
+function buildReportRows(monthTransport, monthOther) {
+  const rows = [
+    ...monthTransport.map(r => ({ ...r, source: 'transport', detail_type: r.transport_type, description: r.route })),
+    ...monthOther.map(r => ({ ...r, source: 'other', detail_type: r.category }))
+  ].sort((a, b) => (a.expense_date < b.expense_date ? -1 : a.expense_date > b.expense_date ? 1 : a.id - b.id));
+  return rows;
+}
+
+function generateMonthlyReport() {
+  const s = computeMonthStats(selectedMonth);
+  const rows = buildReportRows(s.monthTransport, s.monthOther);
+  const container = document.getElementById('print-report');
+
+  if (rows.length === 0) {
+    container.innerHTML = `
+      <h1 class="report-title">Monthly Expense Report — ${monthLabel(selectedMonth)}</h1>
+      <p class="report-subtitle">Generated on ${new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+      <p>No expenses were recorded for this month.</p>
+    `;
+    window.print();
+    return;
+  }
+
+  const categoryRowsHtml = Object.keys(s.categoryBreakdown).map(cat => `
+    <tr><td>${cat.replace('_', ' ')}</td><td>${money(s.categoryBreakdown[cat])}</td><td>${s.categoryPercentages[cat]}%</td></tr>
+  `).join('');
+
+  const transportRowsHtml = Object.keys(s.transportByType)
+    .filter(t => s.transportByType[t] > 0)
+    .map(t => `
+      <tr><td>${t.replace('_', ' ')}</td><td>${money(s.transportByType[t])}</td><td>${s.transportPercentages[t]}%</td></tr>
+    `).join('');
+
+  const itemRowsHtml = rows.map(r => {
+    let details = r.detail_type.replace('_', ' ');
+    if (r.source === 'transport' && r.detail_type === 'mofussil_bus') {
+      details += ` (${r.bus_category || ''}${r.bus_number ? ', ' + r.bus_number : ''})`;
+    }
+    if (r.description) details += ` — ${r.description}`;
+    const remarksText = r.source === 'transport' ? (r.remarks || '') : '';
+    const paidVia = r.source === 'transport' && r.payment_source ? (PAYMENT_LABELS[r.payment_source] || r.payment_source) : '—';
+    return `
+      <tr>
+        <td>${r.expense_date}</td>
+        <td>${r.source === 'transport' ? 'Transport' : 'Other'}</td>
+        <td>${details}</td>
+        <td>${paidVia}</td>
+        <td>${remarksText || '—'}</td>
+        <td>${money(r.amount)}</td>
+      </tr>
+    `;
+  }).join('');
+
+  container.innerHTML = `
+    <h1 class="report-title">Monthly Expense Report — ${monthLabel(selectedMonth)}</h1>
+    <p class="report-subtitle">Generated on ${new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+
+    <div class="report-summary-grid">
+      <div><span>Total Money (Pocket Money)</span><span>${money(s.pocketMoney)}</span></div>
+      <div><span>Total Spent</span><span>${money(s.totalSpent)}</span></div>
+      <div><span>Remaining Balance</span><span>${money(s.remaining)}</span></div>
+      <div><span>Daily Average Spend</span><span>${money(s.dailyAverage)}</span></div>
+    </div>
+
+    <h2 class="report-section-title">Spending by Category</h2>
+    <table class="report-table">
+      <thead><tr><th>Category</th><th>Amount</th><th>% of Total</th></tr></thead>
+      <tbody>${categoryRowsHtml}</tbody>
+    </table>
+
+    ${transportRowsHtml ? `
+      <h2 class="report-section-title">Transport Breakdown</h2>
+      <table class="report-table">
+        <thead><tr><th>Type</th><th>Amount</th><th>% of Transport</th></tr></thead>
+        <tbody>${transportRowsHtml}</tbody>
+      </table>
+    ` : ''}
+
+    <h2 class="report-section-title">All Expenses (${rows.length})</h2>
+    <table class="report-table">
+      <thead><tr><th>Date</th><th>Type</th><th>Details</th><th>Paid Via</th><th>Remarks</th><th>Amount</th></tr></thead>
+      <tbody>${itemRowsHtml}</tbody>
+    </table>
+  `;
+
+  window.print();
+}
+
+document.getElementById('report-btn').addEventListener('click', generateMonthlyReport);
 
 // ---------- Init ----------
 renderSummary();
