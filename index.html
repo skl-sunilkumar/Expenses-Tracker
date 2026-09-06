@@ -6,8 +6,8 @@
 <title>Daily Expense Tracker</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#4f46e5">
-<link rel="icon" href="icon-192.png">
-<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Expenses">
@@ -188,7 +188,6 @@ th { color: var(--muted); font-weight: 600; }
   <button class="tab-btn" data-tab="transport">Add Transport</button>
   <button class="tab-btn" data-tab="other">Add Other Expense</button>
   <button class="tab-btn" data-tab="history">History</button>
-  <button class="tab-btn" data-tab="budget">Pocket Money</button>
 </nav>
 
 <main class="container">
@@ -329,6 +328,15 @@ th { color: var(--muted); font-weight: 600; }
         <label>Amount (₹)</label>
         <input type="number" step="0.01" min="0" name="amount">
 
+        <label>Payment Method</label>
+        <select name="payment_source" id="other_payment_source">
+          <option value="">-- Select --</option>
+          <option value="cash">Cash</option>
+          <option value="gpay">G-Pay</option>
+          <option value="whatsapp_pay">WhatsApp Pay</option>
+          <option value="other">Other</option>
+        </select>
+
         <button type="submit">Add Expense</button>
         <p class="form-msg" id="other-msg"></p>
       </form>
@@ -355,23 +363,6 @@ th { color: var(--muted); font-weight: 600; }
         </table>
       </div>
       <p class="empty-note" id="history-empty" style="display:none;">No expenses logged yet for this month.</p>
-    </div>
-  </section>
-
-  <!-- ================= BUDGET ================= -->
-  <section id="budget" class="tab-panel">
-    <div class="panel narrow">
-      <h2>Set Monthly Pocket Money</h2>
-      <form id="budget-form" novalidate>
-        <label>Month</label>
-        <input type="month" name="month_year">
-
-        <label>Pocket Money Amount (₹)</label>
-        <input type="number" step="0.01" min="0" name="pocket_money">
-
-        <button type="submit">Save Budget</button>
-        <p class="form-msg" id="budget-msg"></p>
-      </form>
     </div>
   </section>
 
@@ -545,12 +536,19 @@ document.getElementById('other-form').addEventListener('submit', (e) => {
     category = document.getElementById('custom_category').value.trim().toLowerCase() || 'other';
   }
 
+  const paymentValue = form.payment_source.value;
+  if (!paymentValue) {
+    showMsg(msg, 'Please select a payment method.', false);
+    return;
+  }
+
   db.other.push({
     id: nextId++,
     expense_date: form.expense_date.value,
     category: category,
     description: form.description.value.trim() || null,
-    amount: amount
+    amount: amount,
+    payment_source: paymentValue
   });
   saveData(db);
 
@@ -560,29 +558,8 @@ document.getElementById('other-form').addEventListener('submit', (e) => {
   customCategoryField.classList.add('hidden');
 });
 
-// ---------- Budget form submit ----------
-document.getElementById('budget-form').addEventListener('submit', (e) => {
-  e.preventDefault();
-  const form = e.target;
-  const msg = document.getElementById('budget-msg');
-  const monthYear = form.month_year.value;
-  const amount = parseFloat(form.pocket_money.value);
-
-  if (!monthYear || !(amount >= 0)) {
-    showMsg(msg, 'Please fill in month and a valid amount.', false);
-    return;
-  }
-
-  db.budgets[monthYear] = amount;
-  saveData(db);
-  showMsg(msg, 'Budget saved!', true);
-  renderSummary();
-});
-
 // ---------- Compute all stats for a given month (used by dashboard + PDF report) ----------
 function computeMonthStats(month) {
-  const pocketMoney = db.budgets[month] || 0;
-
   const monthTransport = db.transport.filter(r => monthOf(r.expense_date) === month);
   const monthOther = db.other.filter(r => monthOf(r.expense_date) === month);
 
@@ -595,7 +572,6 @@ function computeMonthStats(month) {
   const totalOther = Object.values(otherByCategory).reduce((a, b) => a + b, 0);
 
   const totalSpent = totalTransport + totalOther;
-  const remaining = pocketMoney - totalSpent;
 
   const today = new Date();
   const isCurrentMonth = today.toISOString().slice(0, 7) === month;
@@ -605,7 +581,6 @@ function computeMonthStats(month) {
 
   const dailyAverage = totalSpent / daysElapsed;
   const projectedTotal = dailyAverage * daysInMonth;
-  const projectedRemaining = pocketMoney - projectedTotal;
 
   const categoryBreakdown = { transport: totalTransport, ...otherByCategory };
   const categoryPercentages = {};
@@ -619,8 +594,8 @@ function computeMonthStats(month) {
   });
 
   return {
-    month, pocketMoney, totalTransport, totalOther, totalSpent, remaining,
-    dailyAverage, projectedTotal, projectedRemaining, daysElapsed, daysInMonth,
+    month, totalTransport, totalOther, totalSpent,
+    dailyAverage, projectedTotal, daysElapsed, daysInMonth,
     categoryBreakdown, categoryPercentages, transportByType, transportPercentages,
     monthTransport, monthOther
   };
@@ -682,7 +657,7 @@ function renderHistory() {
     if (r.description) details += ` — ${r.description}`;
     if (r.source === 'transport' && r.remarks) details += ` (${r.remarks})`;
 
-    const paidVia = r.source === 'transport' && r.payment_source ? (PAYMENT_LABELS[r.payment_source] || r.payment_source) : '—';
+    const paidVia = r.payment_source ? (PAYMENT_LABELS[r.payment_source] || r.payment_source) : '—';
 
     tr.innerHTML = `
       <td>${r.expense_date}</td>
@@ -757,7 +732,7 @@ function generateMonthlyReport() {
     }
     if (r.description) details += ` — ${r.description}`;
     const remarksText = r.source === 'transport' ? (r.remarks || '') : '';
-    const paidVia = r.source === 'transport' && r.payment_source ? (PAYMENT_LABELS[r.payment_source] || r.payment_source) : '—';
+    const paidVia = r.payment_source ? (PAYMENT_LABELS[r.payment_source] || r.payment_source) : '—';
     return `
       <tr>
         <td>${r.expense_date}</td>
@@ -775,10 +750,10 @@ function generateMonthlyReport() {
     <p class="report-subtitle">Generated on ${new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
 
     <div class="report-summary-grid">
-      <div><span>Total Money (Pocket Money)</span><span>${money(s.pocketMoney)}</span></div>
       <div><span>Total Spent</span><span>${money(s.totalSpent)}</span></div>
-      <div><span>Remaining Balance</span><span>${money(s.remaining)}</span></div>
       <div><span>Daily Average Spend</span><span>${money(s.dailyAverage)}</span></div>
+      <div><span>Transport Total</span><span>${money(s.totalTransport)}</span></div>
+      <div><span>Other Expenses Total</span><span>${money(s.totalOther)}</span></div>
     </div>
 
     <h2 class="report-section-title">Spending by Category</h2>
